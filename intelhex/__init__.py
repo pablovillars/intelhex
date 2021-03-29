@@ -464,10 +464,18 @@ class IntelHex(object):
                 start = addr.start or addresses[0]
                 stop = addr.stop or (addresses[-1]+1)
                 step = addr.step or 1
-                for i in range_g(start, stop, step):
-                    x = self._buf.get(i)
-                    if x is not None:
-                        ih[i] = x
+                for i in range(len(addresses)):
+                    if addresses[i] >= start and addresses[i] < stop:
+                      x = self._buf.get(addresses[i])
+                      if x is not None:
+                          ih[addresses[i]] = x
+                    elif addresses[i] >= stop:
+                        break
+
+                # for i in range_g(start, stop, step):
+                #     x = self._buf.get(i)
+                #     if x is not None:
+                #         ih[i] = x
             return ih
         else:
             raise TypeError('Address has unsupported type: %s' % t)
@@ -918,6 +926,21 @@ class IntelHex(object):
         n += sys.getsizeof(self._offset)
         return n
 
+    def cut(self, cut_start=None, cut_end=None):
+        """Cuts an address range from a hex file."""
+        start, end = self._get_start_end()
+        addresses = self.addresses()
+        for i in addresses:
+            if (i >= cut_start) and (i <= cut_end):
+                del self._buf[i]
+
+    def apply_offset(self, offset=0):
+        """Applies an offset to all addresses in the hex file."""
+        start, end = self._get_start_end()
+        addresses = self.addresses()
+        for i in addresses:
+            self._buf[(i+offset)] = self._buf.pop(i)
+
 #/IntelHex
 
 
@@ -1238,12 +1261,59 @@ def _get_file_and_addr_range(s, _support_drive_letter=None):
             s = s[2:]
     parts = s.split(':')
     n = len(parts)
+    fname = None
+    fstart = None
+    fend = None
+    foffset = None
     if n == 1:
         fname = parts[0]
         fstart = None
         fend = None
-    elif n != 3:
-        raise _BadFileNotation
+        foffset = None
+    elif n == 3:
+        fname = parts[0]
+        if parts[1] is not None:
+            try:
+                if parts[1].startswith("0x") or parts[1].startswith("0X"):
+                    fstart = int(parts[1], 16)
+                else:
+                    fstart = int(parts[1])
+            except ValueError:
+                raise _BadFileNotation
+        if not parts[2] is not None and len(parts[2]) > 0:
+            try:
+                if parts[2].startswith("0x") or parts[2].startswith("0X"):
+                    fend = int(parts[2], 16)
+                else:
+                    fend = int(parts[2])
+            except ValueError:
+                raise _BadFileNotation
+    elif n == 4:
+        fname = parts[0]
+        if parts[1] is not None:
+            try:
+                if parts[1].startswith("0x") or parts[1].startswith("0X"):
+                    fstart = int(parts[1], 16)
+                else:
+                    fstart = int(parts[1])
+            except ValueError:
+                raise _BadFileNotation
+        if parts[2] is not None:
+            try:
+                if parts[2].startswith("0x") or parts[2].startswith("0X"):
+                    fend = int(parts[2], 16)
+                else:
+                    fend = int(parts[2])
+            except ValueError:
+                raise _BadFileNotation
+        if parts[3] is not None:
+            try:
+                if parts[3].startswith("0x") or parts[3].startswith("0X"):
+                    foffset = int(parts[3], 16)
+                else:
+                    foffset = int(parts[3])
+            except ValueError:
+                raise _BadFileNotation
     else:
         fname = parts[0]
         def ascii_hex_to_int(ascii):
@@ -1255,7 +1325,7 @@ def _get_file_and_addr_range(s, _support_drive_letter=None):
             return ascii
         fstart = ascii_hex_to_int(parts[1] or None)
         fend = ascii_hex_to_int(parts[2] or None)
-    return drive+fname, fstart, fend
+    return drive+fname, fstart, fend, foffset
 
 
 ##
